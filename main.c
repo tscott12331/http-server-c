@@ -1,11 +1,12 @@
 #include <fcntl.h>
-/*#include <poll.h>*/
+#include <poll.h>
 #include <signal.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <netinet/in.h>
+#include <sys/poll.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <sys/socket.h>
@@ -52,6 +53,13 @@ int main() {
         perror("sigaction");
         exit(1);
     }
+    
+    // prepare polling struct
+
+    struct pollfd pollObj = {
+        .events = POLLIN
+    };
+    int pollResult;
 
     int incomingSockfd;
     struct sockaddr_in incomingAddr;
@@ -76,13 +84,18 @@ int main() {
         if(pid == 0) {
             close(sockfd);
             // child process
-            if(!setSocketBlocking(incomingSockfd, false)) {
-                printf("failed to set socket to nonblocking\n");
+            pollObj.fd = incomingSockfd;
+            pollResult = poll(&pollObj, 1, POLL_TIMEOUT);
+            if(pollResult < 0) {
+                perror("poll");
                 close(incomingSockfd);
                 exit(1);
-            }  
-            
-            /*printf("socket ready to read from\n");*/
+            } else if(pollResult == 0) {
+                printf("request timed out\n");
+                close(incomingSockfd);
+                exit(1);
+            }
+
             printf("preparing to read incoming bytes...\n");
             char* incomingBuffer = (char*) malloc(MAX_REQUEST_SIZE * sizeof(char) + 1);
             int incomingBytesRead;
@@ -97,13 +110,8 @@ int main() {
                 close(incomingSockfd);
                 exit(1);
             }  
-
-            // extraBuffer to juice out any bytes that extend max length
-            char* extraBuffer = (char*) malloc(MAX_REQUEST_SIZE * sizeof(char));
-            while(read(incomingSockfd, extraBuffer, MAX_REQUEST_SIZE) == MAX_REQUEST_SIZE) {
-                printf("juicing rest of socket request...\n");
-            } 
-            free(extraBuffer); 
+            
+            printf("read request\n");
 
             incomingBuffer[incomingBytesRead] = '\0';
             printf("Request: \n%s\n", incomingBuffer);
