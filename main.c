@@ -19,29 +19,18 @@
 #define MAX_REQUEST_SIZE 1024
 #define POLL_TIMEOUT 1000
 #define PORT 4444
+#define IP_ADDR "127.0.0.1"
 
 bool setSocketBlocking(int fd, bool blocking); 
 void sigActHandler(int s); 
+void pollRead(int reqSockFd);
+void readRequest(char* requestDest, int* bytesReadDest, int reqSockFd);
+void handleRequest(int reqSockFd);
+int prepareSocket(const char* ipAddr, int port);
+void serveRequests(int sockfd);
 
 int main() {
-   int sockfd;
-   if((sockfd = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
-       perror("socket");
-       exit(1);
-   }
-    struct sockaddr_in localAddr = {0};
-    localAddr.sin_port = htons(PORT);
-    localAddr.sin_family = AF_INET;
-    inet_aton("127.0.0.1", &localAddr.sin_addr);
-    if((bind(sockfd, (struct sockaddr*)&localAddr, sizeof(localAddr))) == -1 ) {
-        perror("bind");
-        exit(1);
-    }
-   
-    if((listen(sockfd, REQ_QUEUE_LEN)) == -1) {
-        perror("listen");
-        exit(1);
-    }
+    int sockfd = prepareSocket(IP_ADDR, PORT);
 
     struct sigaction sigAct;
     sigAct.sa_handler = sigActHandler;
@@ -54,19 +43,20 @@ int main() {
         exit(1);
     }
     
-    // prepare polling struct
+    printf("listening on port %d\n", PORT);
+    serveRequests(sockfd);
 
-    struct pollfd pollObj = {
-        .events = POLLIN
-    };
-    int pollResult;
+    close(sockfd);
+    return 0;
 
+}
+
+void serveRequests(int sockfd) {
     int incomingSockfd;
     struct sockaddr_in incomingAddr;
     socklen_t incomingAddrSize = (socklen_t)sizeof(incomingAddr);
     char* ipString = malloc(INET_ADDRSTRLEN * sizeof(char));
-    char* response = "HTTP/1.0 200 \n\nHello World!";
-    printf("listening on port %d\n", PORT);
+
     while(true) {
         incomingSockfd = accept(sockfd,(struct sockaddr*)&incomingAddr, &incomingAddrSize);
         if(incomingSockfd == -1) {
@@ -75,55 +65,20 @@ int main() {
         }
 
         if(inet_ntop(incomingAddr.sin_family, &incomingAddr.sin_addr, ipString, INET_ADDRSTRLEN) == NULL) {
+            free(ipString);
             perror("inet_ntop");
             close(sockfd);
             exit(1);
         }           
+        
         printf("Connection from %s\n", ipString);
+        free(ipString);
+
         int pid = fork();
         if(pid == 0) {
             close(sockfd);
             // child process
-            pollObj.fd = incomingSockfd;
-            pollResult = poll(&pollObj, 1, POLL_TIMEOUT);
-            if(pollResult < 0) {
-                perror("poll");
-                close(incomingSockfd);
-                exit(1);
-            } else if(pollResult == 0) {
-                printf("request timed out\n");
-                close(incomingSockfd);
-                exit(1);
-            }
-
-            printf("preparing to read incoming bytes...\n");
-            char* incomingBuffer = (char*) malloc(MAX_REQUEST_SIZE * sizeof(char) + 1);
-            int incomingBytesRead;
-            printf("allocated space for buffer...\n");
-           
-            // read up to max length request
-            incomingBytesRead = read(incomingSockfd, incomingBuffer, MAX_REQUEST_SIZE);
-            if(incomingBytesRead < 0) {
-                // error
-                perror("read");
-                free(incomingBuffer);
-                close(incomingSockfd);
-                exit(1);
-            }  
-            
-            printf("read request\n");
-
-            incomingBuffer[incomingBytesRead] = '\0';
-            printf("Request: \n%s\n", incomingBuffer);
-
-            if((send(incomingSockfd, response, strlen(response), 0)) == -1) {
-                free(incomingBuffer);
-                perror("send");
-                close(incomingSockfd);
-                exit(1);
-            }
-            printf("successfully sent response\n");
-            free(incomingBuffer);
+            handleRequest(incomingSockfd);
             close(incomingSockfd);
             exit(0);
         } else if(pid < 0) {
@@ -134,10 +89,88 @@ int main() {
         close(incomingSockfd);
 
     }
+}
 
-    close(sockfd);
-    return 0;
+int prepareSocket(const char* ipAddr, int port) {
+   int sockfd;
+   if((sockfd = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
+       perror("socket");
+       exit(1);
+   }
 
+    struct sockaddr_in localAddr = {0};
+    localAddr.sin_port = htons(port);
+    localAddr.sin_family = AF_INET;
+    inet_aton(ipAddr, &localAddr.sin_addr);
+
+    if((bind(sockfd, (struct sockaddr*)&localAddr, sizeof(localAddr))) == -1 ) {
+        perror("bind");
+        exit(1);
+    }
+   
+    if((listen(sockfd, REQ_QUEUE_LEN)) == -1) {
+        perror("listen");
+        exit(1);
+    }
+
+    return sockfd;
+}
+
+void handleRequest(int reqSockFd) {
+        char* response = "HTTP/1.0 200 \n\nHello World!";
+        pollRead(reqSockFd);
+        
+        printf("preparing to read incoming bytes...\n");
+        char* incomingBuffer = (char*) malloc(MAX_REQUEST_SIZE * sizeof(char) + 1);
+        int incomingBytesRead;
+        printf("allocated space for buffer...\n");
+        
+        readRequest(incomingBuffer, &incomingBytesRead, reqSockFd);
+
+        printf("Request: \n%s\n", incomingBuffer);
+
+        if((send(reqSockFd, response, strlen(response), 0)) == -1) {
+            free(incomingBuffer);
+            perror("send");
+            close(reqSockFd);
+            exit(1);
+        }
+        printf("successfully sent response\n");
+        free(incomingBuffer);
+}
+
+void readRequest(char* requestDest, int* bytesReadDest, int reqSockFd) {
+            // read up to max length request
+            *bytesReadDest = read(reqSockFd, requestDest, MAX_REQUEST_SIZE);
+            if(*bytesReadDest < 0) {
+                // error
+                perror("read");
+                free(requestDest);
+                close(reqSockFd);
+                exit(1);
+            }  
+            
+            printf("read request\n");
+
+            requestDest[*bytesReadDest] = '\0';
+}
+
+void pollRead(int reqSockFd) {
+            struct pollfd pollObj = {
+                .events = POLLIN,
+                .fd = reqSockFd
+            };
+            pollObj.fd = reqSockFd;
+            int pollResult = poll(&pollObj, 1, POLL_TIMEOUT);
+            if(pollResult < 0) {
+                perror("poll");
+                close(reqSockFd);
+                exit(1);
+            } else if(pollResult == 0) {
+                printf("request timed out\n");
+                close(reqSockFd);
+                exit(1);
+            }
 }
 
 void sigActHandler(int s) {
