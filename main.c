@@ -15,6 +15,8 @@
 #include <unistd.h>
 #include <errno.h>
 
+#include "directory-parser.h"
+
 #define REQ_QUEUE_LEN 30
 #define MAX_REQUEST_SIZE 1024
 #define POLL_TIMEOUT 1000
@@ -30,6 +32,20 @@ int prepareSocket(const char* ipAddr, int port);
 void serveRequests(int sockfd);
 
 int main() {
+    Folder enclosingFolder = {
+        .page = NULL,
+        .item = {0},
+    };
+    Page* outerPage = initPage(".", &enclosingFolder, NULL);
+    enclosingFolder.page = outerPage;
+
+    scanDirectory(outerPage);
+    for(int i = 0; i < outerPage->itemCount; i++) {
+        printf("%s\n", outerPage->items[i].name);
+    }
+
+
+
     int sockfd = prepareSocket(IP_ADDR, PORT);
 
     struct sigaction sigAct;
