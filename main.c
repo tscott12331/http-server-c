@@ -39,13 +39,19 @@ int main() {
     Page* outerPage = initPage(".", &enclosingFolder, NULL);
     enclosingFolder.page = outerPage;
 
-    scanDirectory(outerPage);
-    for(int i = 0; i < outerPage->itemCount; i++) {
-        printf("%s\n", outerPage->items[i].name);
+    generatePages(outerPage);
+    Page* curPage = outerPage;
+    while(curPage != NULL) {
+        printf("\n== PAGE %s ==\n\n", curPage->name);
+        for(int i = 0; i < curPage->itemCount; i++) {
+            printf("%s", curPage->items[i].name);
+            if(curPage->items[i].type == DI_FOLDER) {
+                printf(" == FOLDER ==");
+            }
+            printf("\n");
+        }   
+        curPage = curPage->nextPage;
     }
-
-
-
     int sockfd = prepareSocket(IP_ADDR, PORT);
 
     struct sigaction sigAct;

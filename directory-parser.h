@@ -3,9 +3,15 @@
 
 #include <time.h>
 
+typedef enum {
+    DI_FILE,
+    DI_FOLDER,
+} DirectoryItemType;
+
 typedef struct {
     size_t size;
     char* name;
+    DirectoryItemType type;
 } DirectoryItem;
 
 typedef struct {
@@ -33,6 +39,6 @@ struct page_t {
 
 void generatePages(Page* initPage);
 Page* initPage(char* name, Folder* enclosingFolder, Folder* parentFolder);
-void scanDirectory(Page* currentPage);
+Page* scanDirectory(Page* currentPage, Page* lastPage);
 
 #endif
