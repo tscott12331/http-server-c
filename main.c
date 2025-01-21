@@ -22,14 +22,16 @@
 #define POLL_TIMEOUT 1000
 #define PORT 4444
 #define IP_ADDR "127.0.0.1"
+#define HTTP_HEAD "HTTP/1.0 "
+#define RES_SUCCESS "200\n"
 
 bool setSocketBlocking(int fd, bool blocking); 
 void sigActHandler(int s); 
 void pollRead(int reqSockFd);
 void readRequest(char* requestDest, int* bytesReadDest, int reqSockFd);
-void handleRequest(int reqSockFd);
+void handleRequest(int reqSockFd, Table* htmlTable);
 int prepareSocket(const char* ipAddr, int port);
-void serveRequests(int sockfd);
+void serveRequests(int sockfd, Table* htmlTable);
 
 int main() {
     Folder enclosingFolder = {
@@ -40,18 +42,19 @@ int main() {
     enclosingFolder.page = outerPage;
 
     generatePages(outerPage);
-    Page* curPage = outerPage;
-    while(curPage != NULL) {
-        printf("\n== PAGE %s ==\n\n", curPage->name);
-        for(int i = 0; i < curPage->itemCount; i++) {
-            printf("%s", curPage->items[i].name);
-            if(curPage->items[i].type == DI_FOLDER) {
-                printf(" == FOLDER ==");
-            }
-            printf("\n");
-        }   
-        curPage = curPage->nextPage;
-    }
+    Table* htmlTable = generateHtmlTable(outerPage);
+    /*Page* curPage = outerPage;*/
+    /*while(curPage != NULL) {*/
+    /*    printf("\n== PAGE %s ==\n\n", curPage->name);*/
+    /*    for(int i = 0; i < curPage->itemCount; i++) {*/
+    /*        printf("%s", curPage->items[i].name);*/
+    /*        if(curPage->items[i].type == DI_FOLDER) {*/
+    /*            printf(" == FOLDER ==");*/
+    /*        }*/
+    /*        printf("\n");*/
+    /*    }   */
+    /*    curPage = curPage->nextPage;*/
+    /*}*/
     int sockfd = prepareSocket(IP_ADDR, PORT);
 
     struct sigaction sigAct;
@@ -66,14 +69,14 @@ int main() {
     }
     
     printf("listening on port %d\n", PORT);
-    serveRequests(sockfd);
+    serveRequests(sockfd, htmlTable);
 
     close(sockfd);
     return 0;
 
 }
 
-void serveRequests(int sockfd) {
+void serveRequests(int sockfd, Table* htmlTable) {
     int incomingSockfd;
     struct sockaddr_in incomingAddr;
     socklen_t incomingAddrSize = (socklen_t)sizeof(incomingAddr);
@@ -100,7 +103,7 @@ void serveRequests(int sockfd) {
         if(pid == 0) {
             close(sockfd);
             // child process
-            handleRequest(incomingSockfd);
+            handleRequest(incomingSockfd, htmlTable);
             close(incomingSockfd);
             exit(0);
         } else if(pid < 0) {
@@ -138,20 +141,46 @@ int prepareSocket(const char* ipAddr, int port) {
     return sockfd;
 }
 
-void handleRequest(int reqSockFd) {
-        char* response = "HTTP/1.0 200 \n\nHello World!";
+char* prepareRequest(char* method, char* path, Table* htmlTable) {
+
+    if(!(strcmp(method, "GET") == 0)) {
+        return "HTTP/1.0 400\n\nInvalid request method";
+    }
+
+    char* html = tableGet(htmlTable, ".");
+    char* response = (char*)malloc(sizeof(HTTP_HEAD) + sizeof(RES_SUCCESS) + strlen(html) + 1);
+    strcpy(response, HTTP_HEAD);
+    strcat(response, RES_SUCCESS);
+    strcat(response, "\n");
+    strcat(response, html);
+    return response;
+    /*return "HTTP/1.0 200\n\nHELLO WORLD!"; */
+}
+
+void handleRequest(int reqSockFd, Table* htmlTable) {
         pollRead(reqSockFd);
         
-        printf("preparing to read incoming bytes...\n");
         char* incomingBuffer = (char*) malloc(MAX_REQUEST_SIZE * sizeof(char) + 1);
         int incomingBytesRead;
-        printf("allocated space for buffer...\n");
         
         readRequest(incomingBuffer, &incomingBytesRead, reqSockFd);
+        
+        char* method = strtok(incomingBuffer, " ");
+        char* path = strtok(NULL, " ");
+        
+        if(method == NULL || path == NULL) {
+            printf("Invalid request\n");
+            free(incomingBuffer);
+            return;
+        }
 
-        printf("Request: \n%s\n", incomingBuffer);
+        printf("Method: %s\n", method);
+        printf("Path: %s\n", path);
+        
+        char* response = prepareRequest(method, path, htmlTable); 
 
         if((send(reqSockFd, response, strlen(response), 0)) == -1) {
+            free(response);
             free(incomingBuffer);
             perror("send");
             close(reqSockFd);
@@ -159,6 +188,7 @@ void handleRequest(int reqSockFd) {
         }
         printf("successfully sent response\n");
         free(incomingBuffer);
+        free(response);
 }
 
 void readRequest(char* requestDest, int* bytesReadDest, int reqSockFd) {
@@ -172,7 +202,6 @@ void readRequest(char* requestDest, int* bytesReadDest, int reqSockFd) {
                 exit(1);
             }  
             
-            printf("read request\n");
 
             requestDest[*bytesReadDest] = '\0';
 }

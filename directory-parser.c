@@ -9,6 +9,13 @@
 
 #define CUR_DIR "."
 #define UP_DIR ".."
+#define HTML_BOILERPLATE_SIZE 266
+
+typedef enum {
+    TAG_RAW,
+    TAG_H1,
+    TAG_A
+} TagType;
 
 Page* initPage(char* name, Folder* enclosingFolder, Folder* parentFolder) {
     Page* page = (Page*) malloc(sizeof(Page));
@@ -24,7 +31,7 @@ void generatePages(Page* initPage) {
     Page* curPage;
     Page* lastPage = initPage;
     for(curPage = initPage; curPage != NULL; curPage = curPage->nextPage) {
-        printf("\n== scanning page '%s' ==\n\n", curPage->name);
+        /*printf("\n== scanning page '%s' ==\n\n", curPage->name);*/
         lastPage = scanDirectory(curPage, lastPage);
     }
 }
@@ -51,10 +58,10 @@ Page* scanDirectory(Page* currentPage, Page* lastPage) {
                 if(dirNameLen <= 2 && 
                     (dirNameLen == 1 && memcmp(dirName, CUR_DIR, 1) == 0) ||
                     (dirNameLen == 2 && memcmp(dirName, UP_DIR, 2) == 0)) {
-                    printf("non-scannable directory '%s', skipped\n", dirName);
+                    /*printf("non-scannable directory '%s', skipped\n", dirName);*/
                    break; 
                 }
-                printf("scanned folder '%s' in page '%s'\n", dirEntry->d_name, currentPage->name);
+                /*printf("scanned folder '%s' in page '%s'\n", dirEntry->d_name, currentPage->name);*/
 
                 Folder* newFolder = malloc(sizeof(Folder));
                 newFolder->item.name = dirEntry->d_name;
@@ -69,7 +76,7 @@ Page* scanDirectory(Page* currentPage, Page* lastPage) {
                 pageName[pageNameLen] = '\0';
                 Page* newPage = initPage(pageName, newFolder, currentPage->enclosingFolder);
                 
-                printf("added new page %s\n", newPage->name);
+                /*printf("added new page %s\n", newPage->name);*/
 
                 newFolder->page = newPage;
                 /*currentPage->nextPage = newPage;*/
@@ -82,7 +89,7 @@ Page* scanDirectory(Page* currentPage, Page* lastPage) {
                 break;
          }
             case DT_REG: {
-                printf("scanned file '%s' in page '%s'\n", dirEntry->d_name, currentPage->name);
+                /*printf("scanned file '%s' in page '%s'\n", dirEntry->d_name, currentPage->name);*/
                 // regular file
                 File* file = (File*) malloc(sizeof(File));
                 file->item.size = dirEntry->d_reclen;
@@ -104,4 +111,142 @@ Page* scanDirectory(Page* currentPage, Page* lastPage) {
    /*    printf("|- page: %s\n", tmp->name);*/
    /*}*/
    return newLastPage == NULL ? lastPage : newLastPage;
+}
+
+static void initHtmlPage(HtmlPage* htmlPage) {
+    htmlPage->capacity = 0;
+    htmlPage->count = 0;
+    htmlPage->html = NULL;
+}
+
+static int getTagLen(TagType type) {
+    int tagLen;
+    switch(type) {
+        case TAG_RAW:
+            tagLen = 0;
+            break;
+        case TAG_A:
+            tagLen = 7;
+            break;
+        case TAG_H1:
+            tagLen = 9;
+            break;
+        default:
+            tagLen = 0;
+            break;
+    }
+    return tagLen;
+}
+
+static int calcHtmlLen(char* text, TagType type, char* attributes) {
+    int tagLen = getTagLen(type);
+
+    // +1 for the space between tag and attributes
+    int attributeLen = attributes == NULL ? 0 : (int) strlen(attributes) + 1;
+    int textLen = text == NULL ? 0 : (int) strlen(text); 
+    /*printf("calculated htmllen for text %s\n", text);*/
+    return tagLen + attributeLen + textLen; 
+}
+
+static int getTagStartLen(TagType type) {
+    switch(type) {
+        case TAG_RAW:
+            return 0;
+        case TAG_H1:
+            return 4;
+        case TAG_A:
+            return 3;
+        default:
+            return 0;
+    }
+}
+
+static char* getTagStart(TagType type, char* attributes) {
+    int attributeLen = attributes == NULL ? 0 : (int)strlen(attributes) + 1;
+    char* tag = (char*)malloc((getTagStartLen(type) + attributeLen + 1) * sizeof(char));
+    switch(type) {
+        case TAG_H1:
+            strcpy(tag, "<h1 ");
+            break;
+        case TAG_A:
+            strcpy(tag, "<a ");
+            break;
+        default:
+            strcpy(tag, "");
+            break;
+    }
+    
+    if(attributes != NULL) {
+        strcat(tag, attributes);
+    }
+    strcat(tag, ">");
+    return tag;
+}
+
+static char* getTagEnd(TagType type) {
+    switch(type) {
+        case TAG_RAW:
+            return "";
+        case TAG_A:
+            return "</a>";
+        case TAG_H1:
+            return "</h1>";
+        default:
+            return "";
+    }
+}
+
+static void appendHtml(HtmlPage* htmlPage, char* text, TagType type, char* attributes) {
+    int addedLength = calcHtmlLen(text, type, attributes);
+    while(htmlPage->count + addedLength + 1 > htmlPage->capacity) {
+        htmlPage->capacity = GROW_CAPACITY(htmlPage->capacity);
+        htmlPage->html = GROW_ARRAY(htmlPage->html, char, htmlPage->capacity);
+    }
+
+    if((int)strlen(htmlPage->html) == 0) {
+        strcpy(htmlPage->html, ""); // appending null byte
+    }
+    if(type == TAG_RAW) {
+        // just append text
+        strcat(htmlPage->html, text);
+    } else {
+        char* tagStart = getTagStart(type, attributes);
+        strcat(htmlPage->html, tagStart);
+        strcat(htmlPage->html, text);
+        strcat(htmlPage->html, getTagEnd(type));
+        free(tagStart);
+    }
+}
+
+static void generateHtmlPage(Table* table, Page* page) {
+    HtmlPage* htmlPage = (HtmlPage*)malloc(sizeof(HtmlPage));
+    initHtmlPage(htmlPage);
+
+    appendHtml(htmlPage, "<!DOCTYPE html>\
+                <html lang=\"en\">\
+                  <head>\
+                    <meta charset=\"UTF-8\">\
+                    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\
+                    <meta http-equiv=\"X-UA-Compatible\" content=\"ie=edge\">\
+                    <title>HTML 5 Boilerplate</title>\
+                    <link rel=\"stylesheet\" href=\"style.css\">\
+                  </head>\
+                  <body>", TAG_RAW, NULL);    
+   // generate some tags... 
+    appendHtml(htmlPage, "Hello World!", TAG_H1, NULL);
+    appendHtml(htmlPage, "</body>\
+            </html>", TAG_RAW, NULL);
+
+    if(!tableSet(table, page->name, htmlPage->html)) {
+       printf("failed to set to table\n"); 
+    }
+}
+
+Table* generateHtmlTable(Page* initPage) {
+    Table* htmlTable = (Table*) malloc(sizeof(Table));
+    Page* curPage;
+    for(curPage = initPage; curPage != NULL; curPage = curPage->nextPage) {
+        generateHtmlPage(htmlTable, curPage);
+    }
+    return htmlTable;
 }

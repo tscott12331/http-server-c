@@ -3,6 +3,8 @@
 
 #include <time.h>
 
+#include "table.h"
+
 typedef enum {
     DI_FILE,
     DI_FOLDER,
@@ -36,7 +38,13 @@ struct page_t {
     struct page_t* nextPage;
 };
 
+typedef struct {
+    int count;
+    int capacity;
+    char* html;
+} HtmlPage;
 
+Table* generateHtmlTable(Page* initPage);
 void generatePages(Page* initPage);
 Page* initPage(char* name, Folder* enclosingFolder, Folder* parentFolder);
 Page* scanDirectory(Page* currentPage, Page* lastPage);
