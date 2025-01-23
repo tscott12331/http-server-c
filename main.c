@@ -33,7 +33,7 @@ void handleRequest(int reqSockFd, Table* htmlTable);
 int prepareSocket(const char* ipAddr, int port);
 void serveRequests(int sockfd, Table* htmlTable);
 
-int main() {
+int main(void) {
     Folder enclosingFolder = {
         .page = NULL,
         .item = {0},

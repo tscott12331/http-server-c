@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 
 #include "table.h"
 #include "arrays.h"
@@ -62,12 +63,17 @@ bool tableSet(Table* table, char* name, char* value) {
         growTableCapacity(table);
     }
     int hash = hashString(name); 
-    int index = hash % table->capacity;
+    int index = hash & (table->capacity - 1);
     Cell* cell = &table->cells[index];
-    while(cell->name != NULL) {
+    while(cell != NULL && cell->name != NULL) {
         cell = &table->cells[++index];
     }
+    if(cell == NULL) {
+        printf("failed to set table for item of name %s\n", name);
+        return false;
+    }
     // cell is unused at this point.
+    printf("setting in table a cell with name '%s' and index '%d'\n", name, index);
     cell->name = name;
     cell->value = value;
     return true;
@@ -75,12 +81,13 @@ bool tableSet(Table* table, char* name, char* value) {
 
 char* tableGet(Table* table, char* name) {
     int hash = hashString(name);
-    int index = hash % table->capacity;
+    int index = hash & (table->capacity - 1);
     Cell* cell = &table->cells[index];
     while(index < table->capacity && cell != NULL && ((strlen(cell->name) != strlen(name)) || 
             (strcmp(cell->name, name) != 0))) {
        cell = &table->cells[++index]; 
     }
     if(cell == NULL) return NULL;
+    /*printf("after searching the table for %s, we found cell with name %s\n", name == NULL ? "NULL" : name, cell->name == NULL ? "NULL" : cell->name);*/
     return cell->value;
 }

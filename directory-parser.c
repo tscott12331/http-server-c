@@ -198,24 +198,32 @@ static char* getTagEnd(TagType type) {
 
 static void appendHtml(HtmlPage* htmlPage, char* text, TagType type, char* attributes) {
     int addedLength = calcHtmlLen(text, type, attributes);
+    printf("added %d length string\n", addedLength);
     while(htmlPage->count + addedLength + 1 > htmlPage->capacity) {
         htmlPage->capacity = GROW_CAPACITY(htmlPage->capacity);
         htmlPage->html = GROW_ARRAY(htmlPage->html, char, htmlPage->capacity);
+        printf("Grew capacity to %d\n", htmlPage->capacity);
     }
 
     if((int)strlen(htmlPage->html) == 0) {
-        strcpy(htmlPage->html, ""); // appending null byte
+        printf("appending null byte\n");
+        strcpy(htmlPage->html, "\0"); // appending null byte
     }
     if(type == TAG_RAW) {
         // just append text
+        printf("tag_raw, just appending text\ntext: %s\n", text);
         strcat(htmlPage->html, text);
     } else {
         char* tagStart = getTagStart(type, attributes);
         strcat(htmlPage->html, tagStart);
         strcat(htmlPage->html, text);
         strcat(htmlPage->html, getTagEnd(type));
+        printf("normal tag\ntext: %s%s%s\n", tagStart, text, getTagEnd(type));
         free(tagStart);
     }
+
+    printf("appended html, new text\n%s\n\n", htmlPage->html);
+    htmlPage->count += addedLength;
 }
 
 static void generateHtmlPage(Table* table, Page* page) {
@@ -223,19 +231,24 @@ static void generateHtmlPage(Table* table, Page* page) {
     initHtmlPage(htmlPage);
 
     appendHtml(htmlPage, "<!DOCTYPE html>\
-                <html lang=\"en\">\
-                  <head>\
-                    <meta charset=\"UTF-8\">\
-                    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\
-                    <meta http-equiv=\"X-UA-Compatible\" content=\"ie=edge\">\
-                    <title>HTML 5 Boilerplate</title>\
-                    <link rel=\"stylesheet\" href=\"style.css\">\
-                  </head>\
-                  <body>", TAG_RAW, NULL);    
+<html lang=\"en\">\
+<head>\
+<meta charset=\"UTF-8\">\
+<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\
+<meta http-equiv=\"X-UA-Compatible\" content=\"ie=edge\">\
+<title>HTML 5 Boilerplate</title>\
+</head>\
+<body>", TAG_RAW, NULL);    
    // generate some tags... 
-    appendHtml(htmlPage, "Hello World!", TAG_H1, NULL);
+    appendHtml(htmlPage, "NEW HTML PAGE", TAG_H1, NULL);
+    appendHtml(htmlPage, page->name, TAG_H1, NULL);
+    Page* curPage;
+    for(curPage = page->nextPage; curPage != NULL; curPage = curPage->nextPage) {
+        appendHtml(htmlPage, curPage->name, TAG_A, NULL); 
+    }
     appendHtml(htmlPage, "</body>\
             </html>", TAG_RAW, NULL);
+
 
     if(!tableSet(table, page->name, htmlPage->html)) {
        printf("failed to set to table\n"); 
@@ -246,6 +259,7 @@ Table* generateHtmlTable(Page* initPage) {
     Table* htmlTable = (Table*) malloc(sizeof(Table));
     Page* curPage;
     for(curPage = initPage; curPage != NULL; curPage = curPage->nextPage) {
+        printf("\n\n== GENERATING HTML PAGE FOR %s ==\n\n", curPage->name);
         generateHtmlPage(htmlTable, curPage);
     }
     return htmlTable;
