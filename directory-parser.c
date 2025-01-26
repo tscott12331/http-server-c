@@ -4,8 +4,8 @@
 #include <string.h>
 #include <dirent.h>
 
-#include "directory-parser.h"
 #include "arrays.h"
+#include "directory-parser.h"
 
 #define CUR_DIR "."
 #define UP_DIR ".."
@@ -23,6 +23,8 @@ Page* initPage(char* name, Folder* enclosingFolder, Folder* parentFolder) {
     page->enclosingFolder = enclosingFolder; 
     page->name = name;
     page->items = NULL;
+    page->itemCapacity = 0;
+    page->itemCount = 0;
     page->nextPage = NULL;
     return page;
 }
@@ -38,8 +40,12 @@ void generatePages(Page* initPage) {
 
 static void addDirectoryItem(Page* page, DirectoryItem item) {
     if(page->itemCount + 1 > page->itemCapacity) {
+        /*printf("Old capacity %d\n", page->itemCapacity);*/
+        int oldCapacity  = page->itemCapacity;
         page->itemCapacity = GROW_CAPACITY(page->itemCapacity);
-        page->items = GROW_ARRAY(page->items, DirectoryItem, page->itemCapacity);
+        /*printf("New capacity %d\n", page->itemCapacity);*/
+        page->items = GROW_ARRAY(page->items, DirectoryItem, oldCapacity, page->itemCapacity);
+        /*page->items = realloc(page->items, page->itemCapacity * sizeof(DirectoryItem));*/
     }
     page->items[page->itemCount] = item;
     page->itemCount++;
@@ -69,7 +75,7 @@ Page* scanDirectory(Page* currentPage, Page* lastPage) {
                 newFolder->item.type = DI_FOLDER;
 
                 int pageNameLen = strlen(currentPage->name) + strlen(dirEntry->d_name) + 1;
-                char* pageName = malloc(pageNameLen + 1);
+                char* pageName = malloc((pageNameLen + 1) * sizeof(char));
                 strcpy(pageName, currentPage->name);
                 strcat(pageName, "/");
                 strcat(pageName, dirEntry->d_name);
@@ -126,10 +132,10 @@ static int getTagLen(TagType type) {
             tagLen = 0;
             break;
         case TAG_A:
-            tagLen = 7;
+            tagLen = 8;
             break;
         case TAG_H1:
-            tagLen = 9;
+            tagLen = 10;
             break;
         default:
             tagLen = 0;
@@ -139,10 +145,11 @@ static int getTagLen(TagType type) {
 }
 
 static int calcHtmlLen(char* text, TagType type, char* attributes) {
+    if(type == TAG_RAW) return strlen(text);
     int tagLen = getTagLen(type);
 
     // +1 for the space between tag and attributes
-    int attributeLen = attributes == NULL ? 0 : (int) strlen(attributes) + 1;
+    int attributeLen = attributes == NULL ? 0 : (int) strlen(attributes);
     int textLen = text == NULL ? 0 : (int) strlen(text); 
     /*printf("calculated htmllen for text %s\n", text);*/
     return tagLen + attributeLen + textLen; 
@@ -162,8 +169,10 @@ static int getTagStartLen(TagType type) {
 }
 
 static char* getTagStart(TagType type, char* attributes) {
-    int attributeLen = attributes == NULL ? 0 : (int)strlen(attributes) + 1;
-    char* tag = (char*)malloc((getTagStartLen(type) + attributeLen + 1) * sizeof(char));
+    int attributeLen = attributes == NULL ? 0 : (int)strlen(attributes);
+    /*if(attributes == NULL) printf("ATTRIBUTES IS NULL\n");*/
+    /*printf("getTagStart: attributeLen %d\n", attributeLen);*/
+    char* tag = (char*)malloc((getTagStartLen(type) + attributeLen + 2) * sizeof(char));
     switch(type) {
         case TAG_H1:
             strcpy(tag, "<h1 ");
@@ -175,11 +184,13 @@ static char* getTagStart(TagType type, char* attributes) {
             strcpy(tag, "");
             break;
     }
-    
+    /*printf("getTagStart: copied initial part of tag: %s\n", tag); */
     if(attributes != NULL) {
         strcat(tag, attributes);
+        /*printf("getTagStart: catted attributes: %s\n", tag);*/
     }
     strcat(tag, ">");
+    /*printf("getTagStart: catted end bracket: %s\n", tag);*/
     return tag;
 }
 
@@ -198,32 +209,52 @@ static char* getTagEnd(TagType type) {
 
 static void appendHtml(HtmlPage* htmlPage, char* text, TagType type, char* attributes) {
     int addedLength = calcHtmlLen(text, type, attributes);
-    printf("added %d length string\n", addedLength);
-    while(htmlPage->count + addedLength + 1 > htmlPage->capacity) {
-        htmlPage->capacity = GROW_CAPACITY(htmlPage->capacity);
-        htmlPage->html = GROW_ARRAY(htmlPage->html, char, htmlPage->capacity);
-        printf("Grew capacity to %d\n", htmlPage->capacity);
+    /*printf("adding %d length to string of count %d & capacity %d\n", addedLength, htmlPage->count, htmlPage->capacity);*/
+    if(htmlPage->count + addedLength + 1 > htmlPage->capacity) {
+        /*printf("need to grow capacity\n");*/
+        int oldCapacity = htmlPage->capacity;
+        do {
+            htmlPage->capacity = GROW_CAPACITY(htmlPage->capacity);
+            /*printf("new capacity %d\n", htmlPage->capacity);*/
+        } while(htmlPage->count + addedLength + 1 > htmlPage->capacity); 
+        
+        htmlPage->html = GROW_ARRAY(htmlPage->html, char, oldCapacity, htmlPage->capacity);
+        /*htmlPage->html = realloc(htmlPage->html, htmlPage->count * sizeof(char));*/
+        /*printf("Grew capacity to %d\n", htmlPage->capacity);*/
+        
+        if(oldCapacity == 0) {
+            /*printf("appending null byte\n");*/
+            strcpy(htmlPage->html, "\0");
+            htmlPage->count++;
+        }
+
     }
 
-    if((int)strlen(htmlPage->html) == 0) {
-        printf("appending null byte\n");
-        strcpy(htmlPage->html, "\0"); // appending null byte
-    }
+    /*printf("strlen of string is %d\n", (int)strlen(htmlPage->html));*/
+
+    /*if((int)strlen(htmlPage->html) == 0) {*/
+    /*    printf("appending null byte\n");*/
+    /*    strcpy(htmlPage->html, "\0"); // appending null byte*/
+    /*}*/
+    /*printf("capacity is sufficient\n");*/
     if(type == TAG_RAW) {
         // just append text
-        printf("tag_raw, just appending text\ntext: %s\n", text);
+        /*printf("tag_raw, just appending text (length: %d to page of length %d): %s\n", (int)strlen(text), (int)strlen(htmlPage->html), text);*/
         strcat(htmlPage->html, text);
     } else {
+        /*printf("normal tag\n");*/
         char* tagStart = getTagStart(type, attributes);
+        /*printf("got tag start\n");*/
         strcat(htmlPage->html, tagStart);
         strcat(htmlPage->html, text);
         strcat(htmlPage->html, getTagEnd(type));
-        printf("normal tag\ntext: %s%s%s\n", tagStart, text, getTagEnd(type));
+        /*printf("text: %s%s%s\n", tagStart, text, getTagEnd(type));*/
         free(tagStart);
     }
 
-    printf("appended html, new text\n%s\n\n", htmlPage->html);
+    /*printf("appended html, new text\n%s\n\n", htmlPage->html);*/
     htmlPage->count += addedLength;
+    /*printf("new htmlPage count %d\n", htmlPage->count);*/
 }
 
 static void generateHtmlPage(Table* table, Page* page) {
@@ -242,25 +273,37 @@ static void generateHtmlPage(Table* table, Page* page) {
    // generate some tags... 
     appendHtml(htmlPage, "NEW HTML PAGE", TAG_H1, NULL);
     appendHtml(htmlPage, page->name, TAG_H1, NULL);
-    Page* curPage;
-    for(curPage = page->nextPage; curPage != NULL; curPage = curPage->nextPage) {
-        appendHtml(htmlPage, curPage->name, TAG_A, NULL); 
+    
+    for(int i = 0; i < page->itemCount; i++) {
+        /*printf("adding directory item %s for page %s\n", page->items[i].name, page->name);*/
+        appendHtml(htmlPage, page->items[i].name, TAG_H1, NULL);
     }
+
     appendHtml(htmlPage, "</body>\
             </html>", TAG_RAW, NULL);
 
-
+    /*printf("attempting to set in table, name: '%s', value: '%s'\n", page->name, htmlPage->html);*/
     if(!tableSet(table, page->name, htmlPage->html)) {
-       printf("failed to set to table\n"); 
+       /*printf("failed to set to table\n"); */
+    }
+}
+
+static void printTable(Table* table) {
+    printf("== TABLE CONTENTS ==\n");
+    for(int i = 0; i < table->capacity; i++) {
+        printf("item %d, name: %s\n", i, table->cells[i].name == NULL ? "NULL" : table->cells[i].name);
     }
 }
 
 Table* generateHtmlTable(Page* initPage) {
     Table* htmlTable = (Table*) malloc(sizeof(Table));
+    initTable(htmlTable);
     Page* curPage;
     for(curPage = initPage; curPage != NULL; curPage = curPage->nextPage) {
         printf("\n\n== GENERATING HTML PAGE FOR %s ==\n\n", curPage->name);
         generateHtmlPage(htmlTable, curPage);
+        /*printTable(htmlTable);*/
+        /*printf("\n");*/
     }
     return htmlTable;
 }

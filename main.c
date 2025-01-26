@@ -43,6 +43,7 @@ int main(void) {
 
     generatePages(outerPage);
     Table* htmlTable = generateHtmlTable(outerPage);
+    
     /*Page* curPage = outerPage;*/
     /*while(curPage != NULL) {*/
     /*    printf("\n== PAGE %s ==\n\n", curPage->name);*/
@@ -97,7 +98,6 @@ void serveRequests(int sockfd, Table* htmlTable) {
         }           
         
         printf("Connection from %s\n", ipString);
-        free(ipString);
 
         int pid = fork();
         if(pid == 0) {
@@ -147,7 +147,10 @@ char* prepareRequest(char* method, char* path, Table* htmlTable) {
         return "HTTP/1.0 400\n\nInvalid request method";
     }
 
-    char* html = tableGet(htmlTable, ".");
+    char* html = tableGet(htmlTable, "./testDir/testDir2");
+        if(html == NULL) {
+        return "HTTP/1.0 404\n\nPage not found";
+    }
     char* response = (char*)malloc(sizeof(HTTP_HEAD) + sizeof(RES_SUCCESS) + strlen(html) + 1);
     strcpy(response, HTTP_HEAD);
     strcat(response, RES_SUCCESS);
@@ -180,7 +183,6 @@ void handleRequest(int reqSockFd, Table* htmlTable) {
         char* response = prepareRequest(method, path, htmlTable); 
 
         if((send(reqSockFd, response, strlen(response), 0)) == -1) {
-            free(response);
             free(incomingBuffer);
             perror("send");
             close(reqSockFd);
@@ -188,7 +190,6 @@ void handleRequest(int reqSockFd, Table* htmlTable) {
         }
         printf("successfully sent response\n");
         free(incomingBuffer);
-        free(response);
 }
 
 void readRequest(char* requestDest, int* bytesReadDest, int reqSockFd) {
