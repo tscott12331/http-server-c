@@ -141,23 +141,54 @@ int prepareSocket(const char* ipAddr, int port) {
     return sockfd;
 }
 
+char* getTablePathFromReq(char* path) {
+    int len = strlen(path);
+    if(len == 1) {
+        if(strcmp(path, "/") != 0) {
+            return NULL;
+        }
+        return ".";
+    } else if(len > 1) {
+        char* p = (char*) malloc((len + 2) * sizeof(char));
+        strcpy(p, ".");
+        strcat(p, path);
+        int i = len;
+        while(p[i] == '/') {
+            p[i] = '\0';
+            i--;
+        }
+        return p;
+    } else {
+        return NULL;
+    }
+}
+
 char* prepareRequest(char* method, char* path, Table* htmlTable) {
 
     if(!(strcmp(method, "GET") == 0)) {
         return "HTTP/1.0 400\n\nInvalid request method";
     }
 
-    char* html = tableGet(htmlTable, "./testDir/testDir2");
+    char* tablePath = getTablePathFromReq(path);
+    if(tablePath == NULL) {
+        return "HTTP/1.0 404\n\nPage not found";
+    }
+
+    char* html = tableGet(htmlTable, tablePath);
         if(html == NULL) {
         return "HTTP/1.0 404\n\nPage not found";
     }
+    
+    if(strlen(tablePath) > 1) {
+        free(tablePath);
+    }
+
     char* response = (char*)malloc(sizeof(HTTP_HEAD) + sizeof(RES_SUCCESS) + strlen(html) + 1);
     strcpy(response, HTTP_HEAD);
     strcat(response, RES_SUCCESS);
     strcat(response, "\n");
     strcat(response, html);
     return response;
-    /*return "HTTP/1.0 200\n\nHELLO WORLD!"; */
 }
 
 void handleRequest(int reqSockFd, Table* htmlTable) {

@@ -230,8 +230,6 @@ static void appendHtml(HtmlPage* htmlPage, char* text, TagType type, char* attri
 
     }
 
-    /*printf("strlen of string is %d\n", (int)strlen(htmlPage->html));*/
-
     /*if((int)strlen(htmlPage->html) == 0) {*/
     /*    printf("appending null byte\n");*/
     /*    strcpy(htmlPage->html, "\0"); // appending null byte*/
@@ -271,27 +269,38 @@ static void generateHtmlPage(Table* table, Page* page) {
 </head>\
 <body>", TAG_RAW, NULL);    
    // generate some tags... 
-    appendHtml(htmlPage, "NEW HTML PAGE", TAG_H1, NULL);
     appendHtml(htmlPage, page->name, TAG_H1, NULL);
     
     for(int i = 0; i < page->itemCount; i++) {
-        /*printf("adding directory item %s for page %s\n", page->items[i].name, page->name);*/
-        appendHtml(htmlPage, page->items[i].name, TAG_H1, NULL);
+        DirectoryItem item = page->items[i];
+        char* href;
+        int pageNameLen = strlen(page->name);
+        int itemNameLen = strlen(item.name); 
+        if(pageNameLen > 1) {
+            char* curPageName = &page->name[2];
+            printf("curPageName: %s\n", curPageName);
+            href = (char*) malloc((pageNameLen + itemNameLen + 8) * sizeof(char)); 
+            strcpy(href, "href=\"/");
+            strcat(href, curPageName);
+            strcat(href, "/");
+            strcat(href, item.name);
+            strcat(href, "\"");
+        } else {
+            href = (char*) malloc((itemNameLen + 9) * sizeof(char));
+            strcpy(href, "href=\"/");
+            strcat(href, item.name);
+            strcat(href, "\"");
+        }
+        
+        appendHtml(htmlPage, page->items[i].name, TAG_A, href); 
+        free(href);
     }
 
     appendHtml(htmlPage, "</body>\
             </html>", TAG_RAW, NULL);
 
-    /*printf("attempting to set in table, name: '%s', value: '%s'\n", page->name, htmlPage->html);*/
     if(!tableSet(table, page->name, htmlPage->html)) {
-       /*printf("failed to set to table\n"); */
-    }
-}
-
-static void printTable(Table* table) {
-    printf("== TABLE CONTENTS ==\n");
-    for(int i = 0; i < table->capacity; i++) {
-        printf("item %d, name: %s\n", i, table->cells[i].name == NULL ? "NULL" : table->cells[i].name);
+       printf("failed to set to table\n"); 
     }
 }
 
@@ -302,8 +311,6 @@ Table* generateHtmlTable(Page* initPage) {
     for(curPage = initPage; curPage != NULL; curPage = curPage->nextPage) {
         printf("\n\n== GENERATING HTML PAGE FOR %s ==\n\n", curPage->name);
         generateHtmlPage(htmlTable, curPage);
-        /*printTable(htmlTable);*/
-        /*printf("\n");*/
     }
     return htmlTable;
 }

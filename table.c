@@ -12,21 +12,18 @@ void initTable(Table* table) {
 }
 
 static int hashString(char* name) {
-    // NOT IMPLEMENTED
-    int hash;
+    int hash = 0;
     for(int i = 0; i < (int)strlen(name); i++) {
         hash += name[i];
         hash = hash ^ 322462468249924;
         hash = hash << 1;
     }
-
     return hash;
 }
 
 static Cell* findCell(Cell* cellList, char* name, int capacity) {
     int hash = hashString(name);
     int index = hash & (capacity - 1);
-    printf("findCell: index %d\n", index);
     Cell* current = &cellList[index]; 
     while(current->name != NULL) {
         // spots taken
@@ -68,15 +65,11 @@ static void growTableCapacity(Table* table) {
 bool tableSet(Table* table, char* name, char* value) {
     if(table->count + 1 > table->capacity * LOAD_FACTOR) {
         // need to grow LeTable
-        printf("growing LeTable\n");
         growTableCapacity(table);
     }
     int hash = hashString(name); 
     int index = hash & (table->capacity - 1);
-    printf("index %d, capacity %d\n", index, table->capacity);
     Cell* cell = &table->cells[index];
-    printf("at index, cell is %s\n", cell == NULL ? "NULL" : "NOT NULL");
-    printf("cell name %s\n", cell->name);
     while(cell != NULL && cell->name != NULL) {
         index++;
         if(index == table->capacity) {
@@ -97,7 +90,15 @@ bool tableSet(Table* table, char* name, char* value) {
     return true;
 }
 
+static void printTable(Table* table) {
+    printf("== TABLE CONTENTS ==\n");
+    for(int i = 0; i < table->capacity; i++) {
+        printf("item %d, name: %s\n", i, table->cells[i].name == NULL ? "NULL" : table->cells[i].name);
+    }
+}
+
 char* tableGet(Table* table, char* name) {
+    printTable(table);
     int hash = hashString(name);
     int index = hash & (table->capacity - 1);
     Cell* cell = &table->cells[index];
@@ -107,9 +108,7 @@ char* tableGet(Table* table, char* name) {
         if(index == table->capacity) {
             index = index & (table->capacity - 1);
         }
-        printf("tableGet: new index %d\n", index);
         cell = &table->cells[index]; 
-        printf("tableGet: cell name %s\n", cell == NULL ? "CELL NULL" : cell->name == NULL ? "NAME NULL" : cell->name);
     }
     if(cell == NULL || cell->name == NULL) return NULL;
     /*printf("after searching the table for %s, we found cell with name %s\n", name == NULL ? "NULL" : name, cell->name == NULL ? "NULL" : cell->name);*/
