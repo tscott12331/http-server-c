@@ -271,6 +271,25 @@ static void generateHtmlPage(Table* table, Page* page) {
    // generate some tags... 
     appendHtml(htmlPage, page->name, TAG_H1, NULL);
     
+    if(page->parentFolder != NULL) {
+        int parentFoldNameLen = strlen(page->parentFolder->page->name);
+        if(parentFoldNameLen > 1) {
+            char* parentFoldName = page->parentFolder->page->name;
+            printf("parentFoldName: %s\n", parentFoldName);
+            parentFoldNameLen = strlen(parentFoldName);
+            char* parentPath;
+            char* curPageName = &parentFoldName[1];
+            parentPath = (char*) malloc((parentFoldNameLen + 7) * sizeof(char)); 
+            strcpy(parentPath, "href=\"");
+            strcat(parentPath, curPageName);
+            strcat(parentPath, "\"");
+        
+            appendHtml(htmlPage, parentFoldName, TAG_A, parentPath);
+        } else {
+            appendHtml(htmlPage, ".", TAG_A, "href=\"/\"");
+        }
+    }
+    
     for(int i = 0; i < page->itemCount; i++) {
         DirectoryItem item = page->items[i];
         char* href;
@@ -278,7 +297,6 @@ static void generateHtmlPage(Table* table, Page* page) {
         int itemNameLen = strlen(item.name); 
         if(pageNameLen > 1) {
             char* curPageName = &page->name[2];
-            printf("curPageName: %s\n", curPageName);
             href = (char*) malloc((pageNameLen + itemNameLen + 8) * sizeof(char)); 
             strcpy(href, "href=\"/");
             strcat(href, curPageName);
