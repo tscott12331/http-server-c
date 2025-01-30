@@ -6,6 +6,7 @@
 
 #include "arrays.h"
 #include "directory-parser.h"
+#include "css.h"
 
 #define CUR_DIR "."
 #define UP_DIR ".."
@@ -266,8 +267,11 @@ static void generateHtmlPage(Table* table, Page* page) {
 <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\
 <meta http-equiv=\"X-UA-Compatible\" content=\"ie=edge\">\
 <title>HTML 5 Boilerplate</title>\
-</head>\
-<body>", TAG_RAW, NULL);    
+", TAG_RAW, NULL);    
+    appendHtml(htmlPage, generateCss(), TAG_RAW, NULL);
+    appendHtml(htmlPage, "</head>\
+            <body>\
+            ", TAG_RAW, NULL);
    // generate some tags... 
     appendHtml(htmlPage, page->name, TAG_H1, NULL);
     
@@ -283,35 +287,45 @@ static void generateHtmlPage(Table* table, Page* page) {
             strcpy(parentPath, "href=\"");
             strcat(parentPath, curPageName);
             strcat(parentPath, "\"");
-        
-            appendHtml(htmlPage, parentFoldName, TAG_A, parentPath);
+
+            /*appendHtml(htmlPage, parentFoldName, TAG_A, parentPath);*/
+            appendHtml(htmlPage, "..", TAG_A,  parentPath);
         } else {
-            appendHtml(htmlPage, ".", TAG_A, "href=\"/\"");
+            appendHtml(htmlPage, "..", TAG_A, "href=\"/\"");
         }
     }
     
     for(int i = 0; i < page->itemCount; i++) {
         DirectoryItem item = page->items[i];
-        char* href;
+        char* attributes;
         int pageNameLen = strlen(page->name);
         int itemNameLen = strlen(item.name); 
+        bool isFile = item.type == DI_FILE;
         if(pageNameLen > 1) {
             char* curPageName = &page->name[2];
-            href = (char*) malloc((pageNameLen + itemNameLen + 8) * sizeof(char)); 
-            strcpy(href, "href=\"/");
-            strcat(href, curPageName);
-            strcat(href, "/");
-            strcat(href, item.name);
-            strcat(href, "\"");
+            int additionalSpace = isFile ? 17 : 8;
+            attributes = (char*) malloc((pageNameLen + itemNameLen + additionalSpace) * sizeof(char)); 
+            strcpy(attributes, "href=\"/");
+            strcat(attributes, curPageName);
+            strcat(attributes, "/");
+            strcat(attributes, item.name);
+            strcat(attributes, "\"");
+            if(isFile) {
+                strcat(attributes, " download");
+            }
         } else {
-            href = (char*) malloc((itemNameLen + 9) * sizeof(char));
-            strcpy(href, "href=\"/");
-            strcat(href, item.name);
-            strcat(href, "\"");
+            int additionalSpace = isFile ? 18 : 9;
+            attributes = (char*) malloc((itemNameLen + additionalSpace) * sizeof(char));
+            strcpy(attributes, "href=\"/");
+            strcat(attributes, item.name);
+            strcat(attributes, "\"");
+            if(isFile) {
+                strcat(attributes, " download");
+            }
         }
-        
-        appendHtml(htmlPage, page->items[i].name, TAG_A, href); 
-        free(href);
+
+        appendHtml(htmlPage, page->items[i].name, TAG_A, attributes); 
+        free(attributes);
     }
 
     appendHtml(htmlPage, "</body>\
