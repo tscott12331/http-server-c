@@ -279,7 +279,6 @@ static void generateHtmlPage(Table* table, Page* page) {
         int parentFoldNameLen = strlen(page->parentFolder->page->name);
         if(parentFoldNameLen > 1) {
             char* parentFoldName = page->parentFolder->page->name;
-            printf("parentFoldName: %s\n", parentFoldName);
             parentFoldNameLen = strlen(parentFoldName);
             char* parentPath;
             char* curPageName = &parentFoldName[1];
@@ -301,6 +300,7 @@ static void generateHtmlPage(Table* table, Page* page) {
         int pageNameLen = strlen(page->name);
         int itemNameLen = strlen(item.name); 
         bool isFile = item.type == DI_FILE;
+        char* diPath = NULL;
         if(pageNameLen > 1) {
             char* curPageName = &page->name[2];
             int additionalSpace = isFile ? 17 : 8;
@@ -310,22 +310,30 @@ static void generateHtmlPage(Table* table, Page* page) {
             strcat(attributes, "/");
             strcat(attributes, item.name);
             strcat(attributes, "\"");
-            if(isFile) {
-                strcat(attributes, " download");
-            }
         } else {
             int additionalSpace = isFile ? 18 : 9;
             attributes = (char*) malloc((itemNameLen + additionalSpace) * sizeof(char));
             strcpy(attributes, "href=\"/");
             strcat(attributes, item.name);
             strcat(attributes, "\"");
-            if(isFile) {
-                strcat(attributes, " download");
+        }
+
+        if(isFile) {
+            strcat(attributes, " download");
+            
+            diPath = (char*) malloc((pageNameLen + itemNameLen + 2) * sizeof(char));
+            strcpy(diPath, page->name);
+            strcat(diPath, "/");
+            strcat(diPath, item.name);
+
+            if(!tableSet(table, diPath, "!")) {
+                printf("failed to set file in htmlTable\n");
             }
         }
 
         appendHtml(htmlPage, page->items[i].name, TAG_A, attributes); 
         free(attributes);
+        /*if(diPath != NULL) free(diPath);*/
     }
 
     appendHtml(htmlPage, "</body>\
@@ -341,7 +349,7 @@ Table* generateHtmlTable(Page* initPage) {
     initTable(htmlTable);
     Page* curPage;
     for(curPage = initPage; curPage != NULL; curPage = curPage->nextPage) {
-        printf("\n\n== GENERATING HTML PAGE FOR %s ==\n\n", curPage->name);
+        /*printf("\n\n== GENERATING HTML PAGE FOR %s ==\n\n", curPage->name);*/
         generateHtmlPage(htmlTable, curPage);
     }
     return htmlTable;

@@ -83,7 +83,7 @@ bool tableSet(Table* table, char* name, char* value) {
     }
 
     // cell is unused at this point.
-    printf("setting in table a cell with name '%s' and index '%d'\n", name, index);
+    /*printf("setting in table a cell with name '%s' and index '%d'\n", name, index);*/
     cell->name = name;
     cell->value = value;
     table->count++;
@@ -98,7 +98,6 @@ static void printTable(Table* table) {
 }
 
 char* tableGet(Table* table, char* name) {
-    printTable(table);
     int hash = hashString(name);
     int index = hash & (table->capacity - 1);
     Cell* cell = &table->cells[index];

@@ -1,4 +1,5 @@
 #include <fcntl.h>
+#include <dirent.h>
 #include <poll.h>
 #include <signal.h>
 #include <stdio.h>
@@ -24,6 +25,9 @@
 #define IP_ADDR "127.0.0.1"
 #define HTTP_HEAD "HTTP/1.0 "
 #define RES_SUCCESS "200\n"
+#define PNF_LEN 28
+#define FNF_LEN 28
+#define IR_LEN 36
 
 bool setSocketBlocking(int fd, bool blocking); 
 void sigActHandler(int s); 
@@ -163,27 +167,71 @@ char* getTablePathFromReq(char* path) {
     }
 }
 
-char* prepareRequest(char* method, char* path, Table* htmlTable) {
+char* pageNotFound() {
+   char* res = (char*) malloc((PNF_LEN + 1) * sizeof(char));
+   strcpy(res, "HTTP/1.0 404\n\nPage not found");
+   return res;
+}
+
+char* fileNotFound() {
+   char* res = (char*) malloc((FNF_LEN + 1) * sizeof(char));
+   strcpy(res, "HTTP/1.0 404\n\nFile not found");
+   return res;
+}
+
+char* invalidReqMethod() {
+   char* res = (char*) malloc((IR_LEN + 1) * sizeof(char));
+   strcpy(res, "HTTP/1.0 400\n\nInvalid request method");
+   return res;
+}
+
+char* prepareResponse(char* method, char* path, Table* htmlTable) {
 
     if(!(strcmp(method, "GET") == 0)) {
-        return "HTTP/1.0 400\n\nInvalid request method";
+        return invalidReqMethod(); 
     }
 
     char* tablePath = getTablePathFromReq(path);
     if(tablePath == NULL) {
-        return "HTTP/1.0 404\n\nPage not found";
+        return pageNotFound();
     }
 
     char* html = tableGet(htmlTable, tablePath);
-        if(html == NULL) {
-        return "HTTP/1.0 404\n\nPage not found";
+    if(html == NULL) {
+        return pageNotFound(); 
     }
     
-    if(strlen(tablePath) > 1) {
+    int pathLen = strlen(tablePath);
+    
+    int htmlLen = (int) strlen(html);
+    if(htmlLen == 1 && memcmp(html, "!", 1) == 0) {
+        // look for file
+        
+        FILE* file = fopen(tablePath, "rb");
+        if(file == NULL) {
+            return fileNotFound();
+        }
+        fseek(file, 0L, SEEK_END);
+        size_t fileSize = ftell(file);
+        
+        char* buffer = (char*) malloc((fileSize + 1) * sizeof(char));
+        
+        rewind(file);
+        
+        fread(buffer, sizeof(char), fileSize, file);
+        buffer[fileSize] = '\0';
+       
+        if(pathLen > 1) {
+            free(tablePath);
+        }
+        return buffer; 
+    }
+
+    if(pathLen > 1) {
         free(tablePath);
     }
 
-    char* response = (char*)malloc(sizeof(HTTP_HEAD) + sizeof(RES_SUCCESS) + strlen(html) + 1);
+    char* response = (char*)malloc(sizeof(HTTP_HEAD) + sizeof(RES_SUCCESS) + htmlLen + 1);
     strcpy(response, HTTP_HEAD);
     strcat(response, RES_SUCCESS);
     strcat(response, "\n");
@@ -211,16 +259,18 @@ void handleRequest(int reqSockFd, Table* htmlTable) {
         printf("Method: %s\n", method);
         printf("Path: %s\n", path);
         
-        char* response = prepareRequest(method, path, htmlTable); 
+        char* response = prepareResponse(method, path, htmlTable); 
 
         if((send(reqSockFd, response, strlen(response), 0)) == -1) {
             free(incomingBuffer);
+            free(response);
             perror("send");
             close(reqSockFd);
             exit(1);
         }
         printf("successfully sent response\n");
         free(incomingBuffer);
+        free(response);
 }
 
 void readRequest(char* requestDest, int* bytesReadDest, int reqSockFd) {
